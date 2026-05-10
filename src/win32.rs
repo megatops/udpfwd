@@ -7,6 +7,7 @@
 //! - Window management: restore, foreground, style configuration
 //! - Power notifications: register/unregister for resume events
 //! - Message processing: wait and peek for power broadcast messages
+//! - Tray icon restoration: detect Explorer restart after hibernate
 
 use std::mem::MaybeUninit;
 
@@ -25,6 +26,14 @@ pub const PBT_APMRESUMEAUTOMATIC: u32 = 0x0007;
 pub const PBT_APMRESUMESUSPEND: u32 = 0x0004;
 const WM_POWERBROADCAST: u32 = 0x0218;
 const PM_REMOVE: u32 = 0x0000;
+
+const NIM_ADD: u32 = 0x0000;
+const NIF_MESSAGE: u32 = 0x0001;
+const NIF_ICON: u32 = 0x0002;
+const NIF_TIP: u32 = 0x0004;
+
+/// Callback message ID used by NWG for tray notifications.
+const NWG_TRAY_MSG: u32 = 0x0400 + 102;
 
 /// GUID for monitor power setting notifications.
 const GUID_MONITOR_POWER_ON: windows_sys::core::GUID = windows_sys::core::GUID {
@@ -53,8 +62,8 @@ pub fn restore_and_foreground(hwnd: isize) {
 pub fn configure_window_style_and_position(hwnd: isize) {
     use windows_sys::Win32::Foundation::RECT;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetSystemMetrics, GetWindowLongW, GetWindowRect, SetWindowLongW, SetWindowPos, SM_CXSCREEN,
-        SM_CYSCREEN,
+        GetSystemMetrics, GetWindowLongW, GetWindowRect, SetWindowLongW, SetWindowPos,
+        SM_CXSCREEN, SM_CYSCREEN,
     };
     unsafe {
         let style = GetWindowLongW(hwnd as *mut _, GWL_STYLE);
@@ -142,5 +151,43 @@ pub fn peek_power_message(
             WM_POWERBROADCAST,
             PM_REMOVE,
         ) != 0
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Tray Icon Restoration
+// -----------------------------------------------------------------------------
+
+/// Registers the `TaskbarCreated` message to detect Explorer restarts.
+///
+/// When Explorer.exe restarts (e.g., after hibernate), all tray icons are
+/// destroyed. Windows broadcasts this registered message so applications
+/// can re-add their icons.
+///
+/// Returns the message ID, or 0 on failure.
+pub fn register_taskbar_created_message() -> u32 {
+    use windows_sys::Win32::UI::WindowsAndMessaging::RegisterWindowMessageW;
+    unsafe {
+        let wide: Vec<u16> = "TaskbarCreated\0".encode_utf16().collect();
+        RegisterWindowMessageW(wide.as_ptr())
+    }
+}
+
+/// Re-adds a tray icon after Explorer restarts using `Shell_NotifyIconW(NIM_ADD)`.
+///
+/// NWG's `set_icon()` uses `NIM_MODIFY`, which silently fails when the icon
+/// has been removed by Explorer. This function rebuilds the `NOTIFYICONDATAW`
+/// and calls `NIM_ADD` to re-register the icon from scratch.
+pub fn readd_tray_icon(hwnd: isize, icon_handle: isize, tip: &[u16]) -> bool {
+    use windows_sys::Win32::UI::Shell::{Shell_NotifyIconW, NOTIFYICONDATAW};
+    unsafe {
+        let mut nid = std::mem::zeroed::<NOTIFYICONDATAW>();
+        nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+        nid.hWnd = hwnd as *mut _;
+        nid.uCallbackMessage = NWG_TRAY_MSG;
+        nid.hIcon = icon_handle as *mut _;
+        let tip_len = tip.len().min(128).saturating_sub(1);
+        std::ptr::copy_nonoverlapping(tip.as_ptr(), nid.szTip.as_mut_ptr(), tip_len);
+        Shell_NotifyIconW(NIM_ADD, &nid) != 0
     }
 }

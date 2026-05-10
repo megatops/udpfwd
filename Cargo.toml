@@ -18,5 +18,5 @@ winres = "0.1"
 native-windows-gui = { version = "1.0", features = ["tray-notification", "message-window", "menu", "cursor", "status-bar", "embed-resource"] }
 native-windows-derive = "1.0"
 winreg = "0.55"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Power"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Power", "Win32_UI_Shell"] }
 clap = { version = "4.0", features = ["derive"] }

@@ -425,6 +425,22 @@ fn main() {
     POWER_HWND.set(hwnd_val).ok();
     configure_window_style_and_position(hwnd_val);
 
+    // Listen for TaskbarCreated to restore tray icon after Explorer restart
+    let taskbar_msg = register_taskbar_created_message();
+    if taskbar_msg != 0 {
+        let tray_hwnd = hwnd_val;
+        nwg::bind_raw_event_handler(&app.window.handle, 0x10001, move |_h, msg, _w, _l| {
+            if msg == taskbar_msg {
+                if let Some(icon) = reload_icon() {
+                    let tip: Vec<u16> = "UDP Forwarder\0".encode_utf16().collect();
+                    readd_tray_icon(tray_hwnd, icon.handle as isize, &tip);
+                }
+            }
+            None
+        })
+        .ok();
+    }
+
     if args.auto_start {
         app.on_start();
     }
