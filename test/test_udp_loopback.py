@@ -8,8 +8,6 @@ Validates:
 IPv4 only.
 """
 
-from __future__ import annotations
-
 import contextlib
 import socket
 import subprocess
@@ -17,7 +15,6 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 # ============================================================================
@@ -66,7 +63,7 @@ LOOPBACK_TESTS = [
 # Process Management
 # ============================================================================
 
-def find_udpfwd_exe() -> Optional[Path]:
+def find_udpfwd_exe() -> Path | None:
     """Locates udpfwd.exe in the release build directory."""
     exe_path = Path(__file__).resolve().parent.parent / "target" / "release" / "udpfwd.exe"
     return exe_path if exe_path.exists() else None

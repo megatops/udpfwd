@@ -14,6 +14,7 @@ use std::net::{SocketAddr, SocketAddrV4, ToSocketAddrs, UdpSocket};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
+
 use winreg::enums::HKEY_CURRENT_USER;
 use winreg::RegKey;
 
@@ -73,7 +74,6 @@ pub struct UdpForwarder {
 
 impl UdpForwarder {
     /// Creates a new forwarder in the idle state.
-    #[inline]
     pub fn new() -> Self {
         Self {
             packet_count: Arc::new(AtomicU64::new(0)),
@@ -96,7 +96,7 @@ impl UdpForwarder {
         let sender = UdpSocket::bind("0.0.0.0:0")?;
         sender.connect(SocketAddr::V4(target_addr))?;
 
-        // Set a short timeout so the loop can check the stop flag regularly
+        // Short timeout so the loop can check the stop flag periodically
         listener.set_read_timeout(Some(std::time::Duration::from_millis(READ_TIMEOUT_MS)))?;
 
         self.packet_count.store(0, Ordering::SeqCst);
@@ -123,8 +123,6 @@ impl UdpForwarder {
                     Err(_) => continue,
                 }
             }
-            drop(listener);
-            drop(sender);
         }));
 
         Ok(())
@@ -133,7 +131,6 @@ impl UdpForwarder {
     /// Signals the forwarding thread to stop and waits for it to exit.
     ///
     /// Idempotent — safe to call multiple times.
-    #[inline]
     pub fn stop(&mut self) {
         self.stop_flag.store(true, Ordering::SeqCst);
         if let Some(handle) = self.forward_thread.take() {
@@ -158,20 +155,17 @@ impl UdpForwarder {
     }
 
     /// Returns `true` if the forwarder has saved configuration for restart.
-    #[inline]
     #[cfg(test)]
     pub fn has_config(&self) -> bool {
         self.config.is_some()
     }
 
     /// Returns the total number of packets forwarded since [`start()`].
-    #[inline]
     pub fn packet_count(&self) -> u64 {
         self.packet_count.load(Ordering::SeqCst)
     }
 
     /// Returns `true` if the forwarding thread is running.
-    #[inline]
     #[cfg(test)]
     pub fn is_running(&self) -> bool {
         self.forward_thread.is_some()
@@ -179,7 +173,6 @@ impl UdpForwarder {
 }
 
 impl Default for UdpForwarder {
-    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -222,8 +215,7 @@ impl Config {
                     .unwrap_or_else(|_| Self::DEFAULT_TARGET_IP.to_string()),
                 target_port: key
                     .get_value::<u32, _>("TargetPort")
-                    .unwrap_or(Self::DEFAULT_TARGET_PORT as u32)
-                    as u16,
+                    .unwrap_or(Self::DEFAULT_TARGET_PORT as u32) as u16,
             },
             Err(_) => Self::default(),
         }

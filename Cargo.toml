@@ -3,7 +3,7 @@ name = "udpfwd"
 version = "1.0.0"
 description = "UDP Forwarder - Forward UDP packets to target IP:Port"
 authors = ["Megatops Software"]
-edition = "2021"
+edition = "2024"
 
 [profile.release]
 opt-level = "z"

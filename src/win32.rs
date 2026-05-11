@@ -4,7 +4,7 @@
 //! Safe wrappers for Windows Win32 API calls.
 //!
 //! Provides zero-cost abstractions over low-level Windows APIs:
-//! - Window management: restore, foreground, style configuration
+//! - Window management: restore, foreground, style configuration, centering
 //! - Power notifications: register/unregister for resume events
 //! - Message processing: wait and peek for power broadcast messages
 //! - Tray icon restoration: detect Explorer restart after hibernate
@@ -48,7 +48,6 @@ const GUID_MONITOR_POWER_ON: windows_sys::core::GUID = windows_sys::core::GUID {
 // -----------------------------------------------------------------------------
 
 /// Restores a minimized window and brings it to the foreground.
-#[inline]
 pub fn restore_and_foreground(hwnd: isize) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow};
     unsafe {
@@ -58,7 +57,6 @@ pub fn restore_and_foreground(hwnd: isize) {
 }
 
 /// Disables the maximize button and centers the window on the primary display.
-#[inline]
 pub fn configure_window_style_and_position(hwnd: isize) {
     use windows_sys::Win32::Foundation::RECT;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -105,16 +103,12 @@ pub fn configure_window_style_and_position(hwnd: isize) {
 /// Registers for power setting change notifications.
 ///
 /// Returns a notification handle, or 0 on failure.
-#[inline]
 pub fn register_power_notification(hwnd: isize) -> isize {
     use windows_sys::Win32::System::Power::RegisterPowerSettingNotification;
-    unsafe {
-        RegisterPowerSettingNotification(hwnd as *mut std::ffi::c_void, &GUID_MONITOR_POWER_ON, 0)
-    }
+    unsafe { RegisterPowerSettingNotification(hwnd as *mut std::ffi::c_void, &GUID_MONITOR_POWER_ON, 0) }
 }
 
 /// Unregisters power setting notifications.
-#[inline]
 pub fn unregister_power_notification(handle: isize) {
     use windows_sys::Win32::System::Power::UnregisterPowerSettingNotification;
     unsafe {
@@ -129,7 +123,6 @@ pub fn unregister_power_notification(handle: isize) {
 /// Waits for Windows messages with a 500ms timeout.
 ///
 /// Returns `false` on error, `true` otherwise.
-#[inline]
 pub fn wait_for_messages() -> bool {
     use windows_sys::Win32::UI::WindowsAndMessaging::MsgWaitForMultipleObjects;
     unsafe { MsgWaitForMultipleObjects(0, std::ptr::null_mut(), 0, 500, 0x01) != 0xFFFFFFFF }
@@ -138,7 +131,6 @@ pub fn wait_for_messages() -> bool {
 /// Peeks at and removes a pending `WM_POWERBROADCAST` message.
 ///
 /// Returns `true` if a message was retrieved.
-#[inline]
 pub fn peek_power_message(
     msg: &mut MaybeUninit<windows_sys::Win32::UI::WindowsAndMessaging::MSG>,
 ) -> bool {

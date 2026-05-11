@@ -6,7 +6,10 @@ A lightweight Windows GUI application that forwards UDP packets from a local por
 
 ## Features
 
-- Minimize to system tray
+- IPv4-only forwarding for maximum throughput (>8000 pps)
+- System tray with Show/Exit context menu
+- Tray icon restoration after Explorer restart
+- Power-resume recovery (auto-restart after sleep/hibernate)
 - Registry-based configuration persistence
 - Command-line support for scripted startup
 
@@ -27,11 +30,11 @@ A lightweight Windows GUI application that forwards UDP packets from a local por
 udpfwd.exe -l 8888 -t 192.168.0.10:8888 -a
 ```
 
-| Option                   | Description                            |
+| Option | Description |
 |--------------------------|----------------------------------------|
-| `-l, --local-port`       | Local port to listen on                |
-| `-t, --target`           | Target address (e.g. `192.168.0.10:80`) |
-| `-a, --auto-start`       | Auto-start forwarding on launch        |
+| `-l, --local-port` | Local port to listen on |
+| `-t, --target` | Target address (e.g. `192.168.0.10:80`) |
+| `-a, --auto-start` | Auto-start forwarding on launch |
 
 ## Build
 

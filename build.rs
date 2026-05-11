@@ -11,7 +11,7 @@ const VERSION_MAJOR: u32 = 1;
 const VERSION_MINOR: u32 = 0;
 const VERSION_BUILD: u32 = 1;
 
-/// Encode `(major, minor, build)` as a 64-bit Windows version integer.
+/// Encodes `(major, minor, build)` as a 64-bit Windows version integer.
 ///
 /// Layout: `[16-bit major][16-bit minor][32-bit build]`.
 fn encode_version(major: u32, minor: u32, build: u32) -> u64 {
@@ -23,10 +23,10 @@ fn main() {
         return;
     }
 
-    // Embed a common-controls v6 manifest for modern widget styles.
+    // Embed a common-controls v6 manifest for modern widget styles
     embed_manifest(new_manifest("Megatops.UDPFwd")).expect("Failed to embed manifest");
 
-    // Embed the application icon and version info.
+    // Embed the application icon and version info
     let file_ver = encode_version(VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD);
     let mut res = winres::WindowsResource::new();
     res.set_icon("resources/icon.ico");
@@ -44,7 +44,7 @@ fn main() {
     res.set_version_info(winres::VersionInfo::PRODUCTVERSION, file_ver);
     res.compile().expect("Failed to compile resources");
 
-    // Re-run this script when any of these files change.
+    // Re-run this script when any of these files change
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/main.rs");
     println!("cargo:rerun-if-changed=src/forwarder.rs");

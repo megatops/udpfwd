@@ -11,11 +11,13 @@
 //!
 //! ## Features
 //!
-//! - IPv4-only forwarding for maximum performance (>8000 pps)
-//! - System tray with Show/Exit menu
-//! - Power resume recovery (auto-restart after sleep)
+//! - IPv4-only forwarding for maximum throughput (>8000 pps)
+//! - System tray with Show/Exit context menu
+//! - Tray icon restoration after Explorer restart (TaskbarCreated)
+//! - Power-resume recovery (auto-restart after sleep/hibernate)
 //! - Embedded application icon
 //! - Registry-based configuration persistence
+//! - CLI support for scripted startup (`-l`, `-t`, `-a`)
 
 mod forwarder;
 mod win32;
@@ -25,7 +27,7 @@ use native_windows_derive as nwd;
 use native_windows_gui as nwg;
 use nwd::NwgUi;
 use nwg::NativeUi;
-use std::mem::MaybeUninit;
+
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
@@ -43,6 +45,7 @@ const FONT_SIZE: u32 = 18;
 const WINDOW_WIDTH: i32 = 284;
 const WINDOW_HEIGHT: i32 = 148;
 const TIMER_INTERVAL_MS: u32 = 1000;
+const TRAY_TIP: &str = "UDP Forwarder";
 
 // -----------------------------------------------------------------------------
 // CLI Arguments
@@ -83,6 +86,7 @@ struct AppState {
 
 static APP_STATE: OnceLock<Arc<AppState>> = OnceLock::new();
 
+/// Returns the global application state, initializing it on first access.
 fn get_state() -> Arc<AppState> {
     APP_STATE
         .get_or_init(|| {
@@ -116,7 +120,7 @@ pub struct App {
     #[nwg_events(OnMenuItemSelected: [App::on_tray_exit])]
     menu_exit: nwg::MenuItem,
 
-    #[nwg_control(icon: Some(&nwg::Icon::default()), tip: Some("UDP Forwarder"))]
+    #[nwg_control(icon: Some(&nwg::Icon::default()), tip: Some(TRAY_TIP))]
     #[nwg_events(OnContextMenu: [App::on_tray_menu], MousePressLeftUp: [App::on_tray_activate])]
     tray: nwg::TrayNotification,
 
@@ -205,20 +209,12 @@ impl App {
             restore_and_foreground(hwnd as isize);
         }
         self.window.set_visible(true);
-        self.reapply_icon();
-    }
-
-    fn reapply_icon(&self) {
-        if let Some(icon) = reload_icon() {
-            self.window.set_icon(Some(&icon));
-            self.tray.set_icon(&icon);
-        }
+        refresh_icon(&self.window, &self.tray);
     }
 
     // -- Timer --
 
     fn on_timer(&self) {
-        self.reapply_icon();
         let state = get_state();
         if !state.is_running.load(Ordering::SeqCst) {
             return;
@@ -295,9 +291,32 @@ impl App {
 }
 
 // -----------------------------------------------------------------------------
-// Helpers
+// Icon Helpers
 // -----------------------------------------------------------------------------
 
+/// Loads the embedded application icon from the executable resources.
+fn load_embedded_icon() -> Option<nwg::Icon> {
+    let embed = nwg::EmbedResource::load(None).ok()?;
+    nwg::Icon::from_embed(&embed, Some(ICON_RESOURCE_ID), None).ok()
+}
+
+/// Applies the embedded icon to the window title bar and system tray.
+///
+/// Uses `Shell_NotifyIconW(NIM_ADD)` via `tray.set_icon()` to re-register the
+/// tray icon, which is idempotent and works after Explorer restarts (unlike
+/// `NIM_MODIFY` which silently fails when the icon has been removed).
+fn refresh_icon(window: &nwg::Window, tray: &nwg::TrayNotification) {
+    if let Some(icon) = load_embedded_icon() {
+        window.set_icon(Some(&icon));
+        tray.set_icon(&icon);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Font Helpers
+// -----------------------------------------------------------------------------
+
+/// Applies the given font to all UI controls.
 fn apply_font(app: &App, font: &nwg::Font) {
     app.lbl_local.set_font(Some(font));
     app.inp_local.set_font(Some(font));
@@ -309,18 +328,6 @@ fn apply_font(app: &App, font: &nwg::Font) {
     app.status_bar.set_font(Some(font));
 }
 
-fn apply_embedded_icon(app: &App) {
-    if let Some(icon) = reload_icon() {
-        app.window.set_icon(Some(&icon));
-        app.tray.set_icon(&icon);
-    }
-}
-
-fn reload_icon() -> Option<nwg::Icon> {
-    let embed = nwg::EmbedResource::load(None).ok()?;
-    nwg::Icon::from_embed(&embed, Some(ICON_RESOURCE_ID), None).ok()
-}
-
 // -----------------------------------------------------------------------------
 // Power Event Listener
 // -----------------------------------------------------------------------------
@@ -330,8 +337,8 @@ static POWER_LISTENING: AtomicBool = AtomicBool::new(false);
 
 /// Starts the power-resume listener thread.
 ///
-/// Registers for monitor power events and auto-restarts the forwarder
-/// when the system resumes from sleep.
+/// Registers for monitor power events and auto-restarts the forwarder when the
+/// system resumes from sleep or hibernation.
 fn start_power_listener() {
     if POWER_LISTENING.swap(true, Ordering::SeqCst) {
         return;
@@ -361,7 +368,9 @@ fn start_power_listener() {
                 continue;
             }
 
-            let mut msg = MaybeUninit::<windows_sys::Win32::UI::WindowsAndMessaging::MSG>::uninit();
+            let mut msg = std::mem::MaybeUninit::<
+                windows_sys::Win32::UI::WindowsAndMessaging::MSG,
+            >::uninit();
             while peek_power_message(&mut msg) {
                 let msg = unsafe { msg.assume_init() };
                 if msg.wParam == PBT_APMRESUMEAUTOMATIC as usize
@@ -383,6 +392,7 @@ fn start_power_listener() {
     });
 }
 
+/// Signals the power-resume listener thread to stop.
 fn stop_power_listener() {
     POWER_LISTENING.store(false, Ordering::SeqCst);
 }
@@ -397,7 +407,8 @@ fn main() {
     nwg::init().expect("Failed to init Native Windows GUI");
     let app = App::build_ui(Default::default()).expect("Failed to build UI");
 
-    apply_embedded_icon(&app);
+    // Apply embedded icon and font
+    refresh_icon(&app.window, &app.tray);
     let mut font = nwg::Font::default();
     nwg::Font::builder()
         .family(FONT_FAMILY)
@@ -406,7 +417,7 @@ fn main() {
         .ok();
     apply_font(&app, &font);
 
-    // Populate UI from config; CLI args override if provided
+    // Populate UI from saved config; CLI arguments override if provided
     let mut cfg = Config::load();
     if let Some(port) = args.local_port {
         cfg.local_port = port;
@@ -419,7 +430,7 @@ fn main() {
     app.inp_ip.set_text(&cfg.target_ip);
     app.inp_target.set_text(&cfg.target_port.to_string());
 
-    // Configure window style, center on screen, and store HWND
+    // Configure window style, center on screen, and store HWND for power listener
     let hwnd = app.window.handle.hwnd().expect("Failed to get HWND");
     let hwnd_val = hwnd as isize;
     POWER_HWND.set(hwnd_val).ok();
@@ -430,11 +441,11 @@ fn main() {
     if taskbar_msg != 0 {
         let tray_hwnd = hwnd_val;
         nwg::bind_raw_event_handler(&app.window.handle, 0x10001, move |_h, msg, _w, _l| {
-            if msg == taskbar_msg {
-                if let Some(icon) = reload_icon() {
-                    let tip: Vec<u16> = "UDP Forwarder\0".encode_utf16().collect();
-                    readd_tray_icon(tray_hwnd, icon.handle as isize, &tip);
-                }
+            if msg == taskbar_msg
+                && let Some(icon) = load_embedded_icon()
+            {
+                let tip: Vec<u16> = format!("{TRAY_TIP}\0").encode_utf16().collect();
+                readd_tray_icon(tray_hwnd, icon.handle as isize, &tip);
             }
             None
         })

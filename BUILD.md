@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Windows 10 or later
-- Rust toolchain (1.70+)
+- Rust toolchain (1.85+; edition 2024)
 - Visual Studio Build Tools (or Visual Studio with the C++ workload)
 
 ## Build
@@ -16,4 +16,16 @@ cargo build --release
 
 ```bash
 cargo run --release
+```
+
+## Test
+
+```bash
+cargo test
+```
+
+For loopback and performance tests, build the release binary first, then:
+
+```bash
+python test/test_udp_loopback.py
 ```
